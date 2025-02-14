@@ -1,23 +1,35 @@
-import random
-from deap import base, creator, tools
 import logging
-from secml.parallel import parfor2
-import numpy as np
-from .manipulation import Manipulator, ManipulationSpace, Manipulations
-from .feature_extraction import FeatureExtractor
 import os
+import random
 import tempfile
+from pathlib import Path
+
+import numpy as np
+from deap import base, creator, tools  # TODO: Remove this solver
+from models.base import BaseModel
+from secml.parallel import parfor2
+
+from .feature_extraction import FeatureExtractor
+from .manipulation import Manipulations, ManipulationSpace, Manipulator
 
 
 def _apply_manipulations(i, manipulator, pop, manipulation_space):
     manipulations = manipulation_space.get_manipulations_from_vector(pop[i])
-    pop[i].apk_path = manipulator.manipulate(manipulations, i)
+    pop[i].apk_path   = manipulator.manipulate(manipulations, i)
+
     return pop[i]
 
 
 class ProblemSpaceAttack:
-    def __init__(self, classifier, manipulated_apks_dir,
-                 logging_level=logging.INFO, features_dir=None):
+    """TODO: Add docstring."""
+
+    def __init__(
+        self,
+        classifier          : BaseModel,
+        manipulated_apks_dir: str,
+        logging_level       : int  = logging.INFO,
+        features_dir        : str | None = None,
+    ) -> None:
         """
         Genetic black-box problem-space attack that manipulates the APK files
         of malware samples to evade the classifier.
@@ -35,38 +47,48 @@ class ProblemSpaceAttack:
             The directory where the adversarial APKs will be stored.
         logging_level : int
             Set the verbosity of the logger.
-        features_dir : string or None
+        features_dir : string | None
             If provided, the extracted features will be stored in this path and
             retrieved from it if available.
         """
-
         self.clf = classifier
+
         self.manipulated_apks_dir = manipulated_apks_dir
-        if not os.path.exists(manipulated_apks_dir):
-            os.makedirs(manipulated_apks_dir)
+        if not Path(manipulated_apks_dir).exists():
+            Path(manipulated_apks_dir).mkdir(parents=True)
+
         self.logger = logging.getLogger(self.__class__.__name__)
         self.logger.setLevel(logging_level)
 
         # Private attributes
-        self._feature_extractor = FeatureExtractor(
-            logging_level=logging.ERROR)
-        self._features_cache = features_dir
+        self._feature_extractor  = FeatureExtractor(logging_level=logging.ERROR)
+        self._features_cache     = features_dir
         self._candidate_features = None
-        self._n_iterations = None
-        self._n_features = None
-        self._n_candidates = None
-        self._stagnation = None
-        self._n_jobs = None
+        self._n_iterations       = None
+        self._n_features         = None
+        self._n_candidates       = None
+        self._stagnation         = None
+        self._n_jobs             = None
 
-    def run(self, malware_samples, goodware_samples, n_iterations=100,
-            n_features=5, n_candidates=5, stagnation=5, seed=0, n_jobs=1):
-        """Runs the attack.
+    def run(
+        self,
+        malware_samples : list[str],
+        goodware_samples: list[str],
+        n_iterations    : int = 100,
+        n_features      : int = 5,
+        n_candidates    : int = 5,
+        stagnation      : int = 5,
+        seed            : int = 0,
+        n_jobs          : int = 1,
+    ) -> list[tuple[int, float, str]]:
+        """
+        Run the attack.
 
         Parameters
         ----------
-        malware_samples : list of strings
+        malware_samples : list of str
             List with the absolute path of each malware APK file to attack.
-        goodware_samples : list of strings
+        goodware_samples : list of str
             List with the absolute path of each goodware APK file to be used
             for the attack initialization.
         n_iterations : int
@@ -76,8 +98,11 @@ class ProblemSpaceAttack:
         n_candidates : int
             Number of considered goodware samples to initialize the population.
         stagnation : int
+            Number of generations without improvement to stop the attack.
         seed : int
+            Seed for the random number generator.
         n_jobs : int
+            Number of parallel jobs to run during the attack.
 
         Returns
         -------
@@ -89,26 +114,26 @@ class ProblemSpaceAttack:
             original sample.
         """
         self._n_iterations = n_iterations
-        self._n_features = n_features
+        self._n_features   = n_features
         self._n_candidates = n_candidates
-        self._stagnation = stagnation
-        self._n_jobs = n_jobs
+        self._stagnation   = stagnation
+        self._n_jobs       = n_jobs
 
         random.seed(seed)
-        np.random.seed(seed)
+        np.random.seed(seed)  # noqa: NPY002
 
-        # get the features from the selected candidates
+        # Get the features from the selected candidates
         self._generate_candidate_features(goodware_samples)
 
         results = []
         for i, sample in enumerate(malware_samples):
-            self.logger.info(f"Attacking sample {i}")
+            self.logger.info("Attacking sample %d", i)
             results.append(self._run(sample))
+
         return results
 
     def _run(self, malware_sample):
-        """Runs the attack on a single sample.
-        """
+        """Runs the attack on a single sample."""
         label, score = self.clf.classify([malware_sample])
         label, score = label.item(), score.item()
         if label == 0:
@@ -122,22 +147,22 @@ class ProblemSpaceAttack:
         best_fitness = score
 
         try:
-            manipulator = Manipulator(malware_sample,
-                                      self.manipulated_apks_dir)
-            pop, toolbox, manipulation_space = \
-                self._init_attack(malware_sample, manipulator)
+            manipulator = Manipulator(malware_sample, self.manipulated_apks_dir)
+            pop, toolbox, manipulation_space = self._init_attack(
+                malware_sample, manipulator
+            )
 
             # Evaluate the entire population
             pop = self.fitness(manipulator, pop, manipulation_space)
 
             if not pop:
                 self.logger.debug("Trying to reinitialize the attack")
-                pop, toolbox, manipulation_space = \
-                    self._init_attack(malware_sample, manipulator)
+                pop, toolbox, manipulation_space = self._init_attack(
+                    malware_sample, manipulator
+                )
                 pop = self.fitness(manipulator, pop, manipulation_space)
                 if not pop:
-                    raise Exception("No manipulation can be applied "
-                                    "to this APK")
+                    raise Exception("No manipulation can be applied to this APK")
 
             # CXPB is the probability with which two individuals are crossed
             # MUTPB is the probability for mutating an individual
@@ -171,37 +196,34 @@ class ProblemSpaceAttack:
                         del mutant.fitness.values
 
                 # Evaluate the individuals with an invalid fitness
-                invalid_ind = [ind for ind in offspring if
-                               not ind.fitness.valid]
-                invalid_ind = self.fitness(
-                    manipulator, invalid_ind, manipulation_space)
+                invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
+                invalid_ind = self.fitness(manipulator, invalid_ind, manipulation_space)
                 pop.extend(invalid_ind)
 
                 fits = np.array([ind.fitness.values[0] for ind in pop])
                 best_idx = np.argmin(fits)
                 best_fitness = fits[best_idx]
                 last_n_best_fits.append(best_fitness)
-                last_n_best_fits = last_n_best_fits[-self._stagnation:]
+                last_n_best_fits = last_n_best_fits[-self._stagnation :]
 
                 # Update adv sample in the first iteration and if fitness
                 # is improved
-                if g == 0 or (len(last_n_best_fits) > 1 and
-                              best_fitness != last_n_best_fits[-2]):
+                if g == 0 or (
+                    len(last_n_best_fits) > 1 and best_fitness != last_n_best_fits[-2]
+                ):
                     label = pop[best_idx].label
                     score = pop[best_idx].score
                     adv_apk_path = pop[best_idx].apk_path
-                    self.logger.debug(
-                        f"Generation {g + 1} - score {best_fitness}")
+                    self.logger.debug(f"Generation {g + 1} - score {best_fitness}")
                     # early stop
                     if label == 0:
-                        self.logger.info(f"Attack finished - "
-                                         f"score {best_fitness}")
+                        self.logger.info(f"Attack finished - score {best_fitness}")
                         return
                 else:
                     self.logger.debug(f"Generation {g + 1} - no improvements")
                 g += 1
 
-            self.logger.info(f"Attack finished - " f"score {best_fitness}")
+            self.logger.info(f"Attack finished - score {best_fitness}")
         except Exception as e:
             self.logger.error(f"Error with sample {malware_sample}: {str(e)}")
         finally:
@@ -217,21 +239,25 @@ class ProblemSpaceAttack:
                 for ind in pop:
                     if ind.apk_path == adv_apk_path:
                         adv_apk_path = os.path.join(
-                            os.path.dirname(ind.apk_path), "adv_" +
-                            os.path.basename(malware_sample))
+                            os.path.dirname(ind.apk_path),
+                            "adv_" + os.path.basename(malware_sample),
+                        )
                         os.rename(ind.apk_path, adv_apk_path)
                     elif os.path.exists(ind.apk_path):
                         os.remove(ind.apk_path)
             return label, score, adv_apk_path
 
     def _init_attack(self, malware_sample, manipulator):
-        """Prepares the population, the manipulation space and the functions
+        """
+        Prepare the population, the manipulation space and the functions
         used by the genetic attack.
         """
         malware_features = self._feature_extractor.extract_features(
-            [malware_sample], out_dir=self._features_cache)
+            [malware_sample], out_dir=self._features_cache
+        )
         manipulation_space = self._build_manipulation_space(
-            malware_features[0], manipulator)
+            malware_features[0], manipulator
+        )
         if not manipulation_space:
             raise Exception("No manipulation can be applied.")
 
@@ -239,23 +265,31 @@ class ProblemSpaceAttack:
             return icls(content)
 
         def init_population(pcls, ind_init):
-            """Initializes the manipulation vectors from the manipulation space
-            and adds them to the population"""
-            return pcls(ind_init(
-                self._get_random_manipulation_vector(manipulation_space))
-                        for _ in range(self._n_candidates))
+            """
+            Initializes the manipulation vectors from the manipulation space
+            and adds them to the population.
+            """
+            return pcls(
+                ind_init(self._get_random_manipulation_vector(manipulation_space))
+                for _ in range(self._n_candidates)
+            )
 
         creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
-        creator.create("Individual", np.ndarray,
-                       fitness=creator.FitnessMin, apk_path=str, score=float,
-                       label=int)
+        creator.create(
+            "Individual",
+            np.ndarray,
+            fitness=creator.FitnessMin,
+            apk_path=str,
+            score=float,
+            label=int,
+        )
 
         toolbox = base.Toolbox()
         # Register the function to initialize individuals and population
-        toolbox.register("individual_guess", init_individual,
-                         creator.Individual)
-        toolbox.register("population_guess", init_population, list,
-                         toolbox.individual_guess)
+        toolbox.register("individual_guess", init_individual, creator.Individual)
+        toolbox.register(
+            "population_guess", init_population, list, toolbox.individual_guess
+        )
         pop = toolbox.population_guess()  # Initialize population
 
         # Register the crossover operator
@@ -267,20 +301,30 @@ class ProblemSpaceAttack:
         # generation: each individual of the current generation
         # is replaced by the 'fittest' (best) of the selected candidates
         # from the current generation.
-        toolbox.register("select", tools.selTournament,
-                         tournsize=self._n_candidates)
+        toolbox.register("select", tools.selTournament, tournsize=self._n_candidates)
 
         return pop, toolbox, manipulation_space
 
-    def _generate_candidate_features(self, goodware_samples):
-        # Extract the features from the provided goodware samples, select only
-        # features that can be manipulated (added)
+    def _generate_candidate_features(self, goodware_samples: list[str]) -> None:
+        """
+        Extract the features from the provided goodware samples, select only
+        features that can be manipulated (added).
+
+        Parameters
+        ----------
+        goodware_samples : list of str
+            List of paths of the goodware samples.
+        """
         self._candidate_features = []
+
         self.logger.debug("Generating candidates")
+
         goodware_features = self._feature_extractor.extract_features(
-            goodware_samples, out_dir=self._features_cache)
+            goodware_samples, out_dir=self._features_cache
+        )
         self._candidate_features = ManipulationSpace.get_valid_injections(
-            goodware_features)
+            goodware_features
+        )
 
     def _build_manipulation_space(self, malware_features, manipulator):
         """
@@ -299,16 +343,19 @@ class ProblemSpaceAttack:
             Object containing the features that can be manipulated.
         """
         self.logger.debug(f"Building manipulation space")
-        manipulation_space = ManipulationSpace(self._candidate_features,
-                                               malware_features)
+        manipulation_space = ManipulationSpace(
+            self._candidate_features, malware_features
+        )
         error_free_injections = manipulator.get_error_free_manipulations(
-            manipulation_space.get_all_injections(), self._n_jobs)
+            manipulation_space.get_all_injections(), self._n_jobs
+        )
         error_free_obfuscations = manipulator.get_error_free_manipulations(
-            manipulation_space.get_all_obfuscations(), self._n_jobs)
+            manipulation_space.get_all_obfuscations(), self._n_jobs
+        )
         error_free_manipulations = Manipulations(
-            error_free_injections.inject, error_free_obfuscations.obfuscate)
-        manipulation_space.set_error_free_manipulations(
-            error_free_manipulations)
+            error_free_injections.inject, error_free_obfuscations.obfuscate
+        )
+        manipulation_space.set_error_free_manipulations(error_free_manipulations)
         return manipulation_space
 
     def _get_random_manipulation_vector(self, manipulation_space):
@@ -327,8 +374,10 @@ class ProblemSpaceAttack:
             The manipulation vector.
         """
         return np.random.choice(
-            np.arange(len(manipulation_space)), replace=False,
-            size=min(len(manipulation_space), self._n_features))
+            np.arange(len(manipulation_space)),
+            replace=False,
+            size=min(len(manipulation_space), self._n_features),
+        )
 
     def fitness(self, manipulator, pop, manipulation_space):
         """Calculates the fitness of a list of individuals.
@@ -349,17 +398,23 @@ class ProblemSpaceAttack:
             The individual list updated with fitness and manipulated apk paths.
         """
         self.logger.debug(f"Applying manipulations to {len(pop)} samples")
-        updated_pop = [ind for ind in parfor2(
-            _apply_manipulations, len(pop), self._n_jobs, manipulator, pop,
-            manipulation_space) if ind.apk_path is not None and
-            os.path.isfile(ind.apk_path)]
+        updated_pop = [
+            ind
+            for ind in parfor2(
+                _apply_manipulations,
+                len(pop),
+                self._n_jobs,
+                manipulator,
+                pop,
+                manipulation_space,
+            )
+            if ind.apk_path is not None and os.path.isfile(ind.apk_path)
+        ]
         if not updated_pop:
             self.logger.debug(f"All the manipulations failed")
         else:
-            self.logger.debug(f"Computing fitness for "
-                              f"{len(updated_pop)} samples")
-            labels, scores = self.clf.classify(
-                [ind.apk_path for ind in updated_pop])
+            self.logger.debug(f"Computing fitness for {len(updated_pop)} samples")
+            labels, scores = self.clf.classify([ind.apk_path for ind in updated_pop])
             for i, ind in enumerate(updated_pop):
                 ind.fitness.values = (scores[i],)
                 ind.score = scores[i]
@@ -414,4 +469,4 @@ class ProblemSpaceAttack:
                 manipulation = random.randrange(0, len(manipulation_space))
                 if manipulation not in individual:
                     individual[idx] = manipulation
-        return individual,
+        return (individual,)
