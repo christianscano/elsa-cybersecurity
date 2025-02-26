@@ -1,5 +1,6 @@
 """
-The module provides functionality for evaluating a classifier on goodware and adversarial test sets.
+The module provides functionality for evaluating a classifier on goodware and
+adversarial test sets.
 
 Functions
 ---------

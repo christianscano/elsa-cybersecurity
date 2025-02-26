@@ -21,12 +21,11 @@ Part of the following code was taken from: https://github.com/MLDroid/drebin
 """
 
 import json
-from pathlib import Path
+import logging
 import re
-import os
 import time
 import zipfile
-import logging
+from pathlib import Path
 from xml.dom import minidom
 
 import lxml
@@ -85,7 +84,7 @@ def process_apk(apk_file: str, features_out_dir: str, logger: logging.Logger) ->
             with Path(filename_data).open("w") as f:
                 json.dump(data_dictionary, f)
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         final_time = time.time()
         logger.debug(e)
         logger.debug("%s processing failed in %ss...", apk_file, final_time - start_time)
@@ -101,30 +100,49 @@ def process_apk(apk_file: str, features_out_dir: str, logger: logging.Logger) ->
         ]
 
 
-def get_from_xml(apk_file: str, app_obj, logger):
+def get_from_xml(apk_file: str, app_obj: apk.APK, logger: logging.Logger) -> tuple:
+    """
+    Extract activities, services, providers, and receivers from the AndroidManifest.xml
+    of an APK file.
+
+    Parameters
+    ----------
+    apk_file: str
+        The path to the APK file.
+    app_obj: apk.APK
+        The APK object.
+    logger: logging.Logger
+        The logger object.
+
+    Returns
+    -------
+    tuple
+        A tuple containing the extracted activities, services, providers, and receivers.
+    """
     filename_xml = f"{apk_file}.xml"
 
     activities = set()
-    services = set()
-    providers = set()
-    receivers = set()
+    services   = set()
+    providers  = set()
+    receivers  = set()
 
     try:
-        apk_file = os.path.abspath(apk_file)
-        with open(filename_xml, "w") as f:
+        apk_file = Path(apk_file).resolve()
+        with Path(filename_xml).open("w") as f:
             f.write(
                 lxml.etree.tostring(
                     app_obj.xml["AndroidManifest.xml"], pretty_print=True
                 ).decode()
             )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.debug(e)
-        logger.debug(f"error while reading {apk_file} AndroidManifest.xml")
-        if os.path.exists(filename_xml):
-            os.remove(filename_xml)
-        return
+        logger.debug("error while reading %s AndroidManifest.xml", apk_file)
+        if Path(filename_xml).exists:
+            Path(filename_xml).unlink()
+        return activities, services, providers, receivers
+
     try:
-        with open(filename_xml, "r") as f:
+        with Path(filename_xml).open("r") as f:
             dom = minidom.parse(f)
 
         dom_collection = dom.documentElement
@@ -157,13 +175,30 @@ def get_from_xml(apk_file: str, app_obj, logger):
         logger.debug(e)
         return activities, services, providers, receivers
     finally:
-        if os.path.exists(filename_xml):
-            os.remove(filename_xml)
-        return activities, services, providers, receivers
+        if Path(filename_xml).exists():
+            Path(filename_xml).unlink()
+
+    return activities, services, providers, receivers
 
 
-def get_from_instructions(app_obj, logger):
+def get_from_instructions(app_obj: apk.APK, logger: logging.Logger) -> tuple:  # noqa: C901, PLR0915
+    """
+    Extract API calls, suspicious API calls, and URLs from the DEX files of an APK file.
+
+    Parameters
+    ----------
+    app_obj: apk.APK
+        The APK object.
+    logger: logging.Logger
+        The logger object.
+
+    Returns
+    -------
+    tuple
+        A tuple containing the extracted API calls, suspicious API calls, and URLs.
+    """
     app_sdk = app_obj.get_effective_target_sdk_version()
+
     # FIXME: hardcoded for now
     if app_sdk > 30:
         use_mapping = 30
@@ -172,36 +207,32 @@ def get_from_instructions(app_obj, logger):
     else:
         use_mapping = app_sdk
 
-    with open(
-        os.path.join(
-            os.path.dirname(__file__), f"resources/perm_mapping_{use_mapping}.json"
-        ),
-        "r",
-    ) as f:
+    with (
+        Path(__file__).parent / f"resources/perm_mapping_{use_mapping}.json"
+    ).open() as f:
         perm_mapping = json.load(f)
 
     api_mapping = {api: perm for perm, apis in perm_mapping.items() for api in apis}
 
-    with open(
-        os.path.join(os.path.dirname(__file__), "resources/SensitiveApis.txt"), "r"
-    ) as f:
+    with (Path(__file__).parent / "resources/SensitiveApis.txt").open() as f:
         sensitive_apis = [l.strip() for l in f.readlines()]
 
-    api_calls = set()
+    api_calls        = set()
     suspicious_calls = set()
-    url_domains = set()
+    url_domains      = set()
 
-    api_pattern = re.compile("L.*;->.*\(.+\).*")
+    api_pattern     = re.compile("L.*;->.*\(.+\).*")  # noqa: W605
     red_api_pattern = re.compile("L(.*)" + re.escape("("))
-    url_pattern = re.compile(
-        "http[s]?://([\w\d-]+\.)*[\w-]+[\.\:]\w+([\/\?\=\&\#.]?[\w-]+)*\/?"
+    url_pattern     = re.compile(
+        "http[s]?://([\w\d-]+\.)*[\w-]+[\.\:]\w+([\/\?\=\&\#.]?[\w-]+)*\/?"  # noqa: W605
     )
-    ip_pattern = re.compile(
-        "(?:[\d]{1,3})\.(?:[\d]{1,3})\.(?:[\d]{1,3})\.(?:[\d]{1,3})"
+    ip_pattern      = re.compile(
+        "(?:[\d]{1,3})\.(?:[\d]{1,3})\.(?:[\d]{1,3})\.(?:[\d]{1,3})"  # noqa: W605
     )
+
     # TODO: add ipv6?
 
-    def process_api(signature):
+    def _process_api(signature: str) -> None:
         try:
             red_signature = re.findall(red_api_pattern, signature)[0]
             if red_signature in api_mapping:
@@ -209,9 +240,9 @@ def get_from_instructions(app_obj, logger):
             if signature in sensitive_apis:
                 suspicious_calls.add(signature)
         except Exception as inst_match_err:
-            logger.debug(f"instruct error: {inst_match_err}")
+            logger.debug("instruct error: %s", inst_match_err)
 
-    def parse_url(instruction):
+    def _parse_url(instruction: str) -> None:
         url = re.search(url_pattern, instruction)
         if url:  # we could validate urls but we may miss special f-strings
             url_domains.add(url.group())
@@ -234,8 +265,8 @@ def get_from_instructions(app_obj, logger):
                         continue
                     signature = re.findall(api_pattern, instruction)
                     if len(signature) != 0:
-                        process_api(signature[0])
-                    parse_url(instruction)
+                        _process_api(signature[0])
+                    _parse_url(instruction)
         except ValueError as e:
             if str(e).startswith("This is not a DEX file!"):
                 continue
