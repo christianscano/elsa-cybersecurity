@@ -1,0 +1,4 @@
+# frida-servers
+frida-server/*
+# rom Android devices rooted
+rom/*
