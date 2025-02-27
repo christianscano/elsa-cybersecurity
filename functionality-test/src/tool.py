@@ -7,8 +7,7 @@ class Adb:
     this class aggregates adb functionalities
     """
 
-    def __init__(self):
-        
+    def __init__(self, device):
         
         self.adb_path = "adb"
         
@@ -19,16 +18,16 @@ class Adb:
             )
         else:
             self.adb_path = full_adb_path
+        
+        self.device = device
 
 
-    def get_pid(self, device: str, pkg_name: str) -> str|None:
+    def get_pid(self, pkg_name: str) -> str|None:
         """
         get process id of the running application
 
         Parameters
         ----------
-        device : str
-            device id where to uninstall the application
         pkg_name : str
             package name to uninstall
 
@@ -41,7 +40,7 @@ class Adb:
         cmd = List[str] = [
             self.adb_path,
             "-s",
-            device,
+            self.device,
             "shell",
             "ps | grep",
             pkg_name
@@ -56,7 +55,7 @@ class Adb:
         except:
             return None
     
-    def push_file(self, device: str, file_path: str, directory: str) -> None:
+    def push_file(self, file_path: str, directory: str) -> None:
 
         """
 
@@ -64,8 +63,6 @@ class Adb:
 
         Parameters
         ----------
-        device : str
-            device id where to uninstall the application
         file_path : str
             file_path to push
         directory:
@@ -75,7 +72,7 @@ class Adb:
         cmd = List[str] = [
             self.adb_path,
             "-s",
-            device,
+            self.device,
             "push",
             file_path,
             directory
@@ -84,14 +81,12 @@ class Adb:
         # os.system(cmd)
         subprocess.call(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
     
-    def chmod(self, device: str, file_path: str, permissions: str):
+    def chmod(self, file_path: str, permissions: str):
         """
         chmod for a file in a device
 
         Parameters
         ----------
-        device : str
-            device id where to uninstall the application
         file_path : str
             file_path to push
         permissions : str
@@ -101,7 +96,7 @@ class Adb:
         cmd = List[str] = [
             self.adb_path,
             "-s",
-            device,
+            self.device,
             "shell",
             "chmod",
             permissions,
@@ -111,14 +106,12 @@ class Adb:
         # os.system(cmd)
         subprocess.call(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
     
-    def execute_file(self, device: str, file_path: str):
+    def execute_file(self, file_path: str):
         """
         chmod for a file in a device
 
         Parameters
         ----------
-        device : str
-            device id where to uninstall the application
         file_path : str
             file_path to push
         """
@@ -126,7 +119,7 @@ class Adb:
         cmd = List[str] = [
             self.adb_path,
             "-s",
-            device,
+            self.device,
             "su 0 sh -c",
             f"'{file_path} &'"
         ]
@@ -135,20 +128,19 @@ class Adb:
         subprocess.call(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
 
         
-    def uninstall_pkg(self, device: str, pkg_name: str):
+    def uninstall_pkg(self, pkg_name: str):
         """
         Uninstall app by pkg_name
 
-        Args:
-            device : str
-                device id where to uninstall the application
-            pkg_name : str
-                package name to uninstall
+        Parameters
+        ----------
+        pkg_name : str
+            package name to uninstall
         """
         cmd = List[str] = [
             self.adb_path,
             "-s",
-            device,
+            self.device,
             "uninstall",
             pkg_name
         ]
