@@ -5,7 +5,7 @@ from time import sleep
 from tool import Adb
 from loguru import Logger
 
-class Droidbot:
+class DroidbotActivation:
     """
     This class defines droidbot features
     """
@@ -26,6 +26,7 @@ class Droidbot:
         logger : Logger
             logger where to log monitoring process
         """
+        
         self.timeout = timeout
         self.device = device
         self.output_dir = output_dir
