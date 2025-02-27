@@ -3,13 +3,14 @@ import subprocess
 from typing import List
 from time import sleep
 from tool import Adb
+from loguru import Logger
 
 class Droidbot:
     """
     This class defines droidbot features
     """
 
-    def __init__(self, timeout: int, device: str, output_dir: str, droidbot_args: list):
+    def __init__(self, timeout: int, device: str, output_dir: str, droidbot_args: list, logger: Logger):
         """
 
         Parameters
@@ -22,21 +23,27 @@ class Droidbot:
             droidbot output directory
         droidbot_args : list
             droidbot arguments from https://github.com/honeynet/droidbot/tree/master
+        logger : Logger
+            logger where to log monitoring process
         """
         self.timeout = timeout
         self.device = device
         self.output_dir = output_dir
         self.droidbot_args = droidbot_args
-        self.adb = Adb()
+        self.logger = logger
+        self.adb = Adb(device)
     
 
     def _start_droidbot(self, apk_path: str) -> int:
         """
 
-        Args:
-            apk_path (str): path of the apk to execute and instrument with droidbot
+        Parameters
+        ----------
+            apk_path : str
+                path of the apk to execute and instrument with droidbot
 
-        Returns:
+        Returns
+        ----------
             int: pid of droidbot subprocess
         """
         apk_sha = os.path.split(apk_path[-1]).replace('.apk', '')
@@ -69,9 +76,12 @@ class Droidbot:
         Returns:
             int: pid of droidbot subprocess
         """
-        p_droidbot = self._start_droidbot(apk_path)
-        sleep(20)   # Wait for Droitbot to complete initialization
-        return p_droidbot
+        try:
+            p_droidbot = self._start_droidbot(apk_path)
+            sleep(20)   # Wait for Droitbot to complete initialization
+            return p_droidbot
+        except Exception as e:
+            self.logger.error(f"run droidbot interrupted due to {e}")
 
     def kill(self, pkg_name: str):
         """
@@ -84,5 +94,9 @@ class Droidbot:
             package name of the instrumented application
         """
         
-        self.adb.uninstall_pkg(self.device, "io.github.ylimit.droidbotapp")
-        self.adb.uninstall_pkg(self.device, pkg_name)
+        try:
+            self.adb.uninstall_pkg(self.device, "io.github.ylimit.droidbotapp")
+            self.adb.uninstall_pkg(self.device, pkg_name)
+            self.logger.info("droidbot and application to instrument is killed")
+        except Exception as e:
+            self.logger.error(f"kill droidbot process interrupted due to {e}")

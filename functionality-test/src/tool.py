@@ -104,7 +104,7 @@ class Adb:
         ]
         # cmd = " ".join(cmd)
         # os.system(cmd)
-        subprocess.call(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+        subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
     
     def execute_file(self, file_path: str):
         """
@@ -125,7 +125,7 @@ class Adb:
         ]
         # cmd = " ".join(cmd)
         # os.system(cmd)
-        subprocess.call(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+        subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
 
         
     def uninstall_pkg(self, pkg_name: str):
@@ -145,4 +145,5 @@ class Adb:
             pkg_name
         ]
 
-        subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+        # subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+        subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
