@@ -6,6 +6,8 @@ from typing import List, Tuple
 import shutil
 from jinja2 import Template
 from androguard.misc import AnalyzeAPK
+from time import sleep
+import psutil
 
 exclude_classes = ['android.support', 'android.content', 'android.widget', 'android.graphics', 'android.canvas',
                    'android.view', 'android.util', 'android.animation', 'android.webkit','java.util', 'java.math', 
@@ -227,7 +229,7 @@ class FridaMonitor:
         return pkg_name
 
 
-    def attach(self, apk_path: str, pkg_name: str, idx: int) -> Tuple[int, str]:
+    def _attach(self, apk_path: str, idx: int, pid: str) -> Tuple[int, str]:
         """
         attach to frida server to hook APIs based on the script
 
@@ -235,10 +237,10 @@ class FridaMonitor:
         ----------
         apk_path : str
             path of the apk to hook
-        pkg_name : str
-            package name of the apk to hook
         idx : int
             index of the frida run
+        pid : str
+            process id of the running apk
 
         Returns
         -------
@@ -252,7 +254,6 @@ class FridaMonitor:
             os.mkdir(output_path)
 
         output_path = os.path.join(output_path, f'monitoring{idx}.txt')
-        pid = self.adb.get_pid(pkg_name)
 
         cmd = List[str] = [
             self.frida_path,
@@ -262,9 +263,58 @@ class FridaMonitor:
             self.script,
             "-p",
             pid,
-            "--no-pause"
+            ">",
+            output_path
         ]
-        fp = open(output_path, 'w')
-        process = subprocess.Popen(cmd, stdout=fp, stderr=subprocess.DEVNULL)
+
+        process = subprocess.Popen(cmd, stderr=subprocess.DEVNULL)
         self.logger.info(f"frida is attached and hooking APIs for {apk_path}")
-        return process.pid, fp
+        return process.pid
+
+    def run_hooking(self, apk_path: str, pkg_name: str, max: int) -> None:
+        """
+        run hooking of the APIs
+
+        Parameters
+        ----------
+        apk_path : str
+            path of the apk to hook
+        pkg_name : str
+            package
+        max : int
+            max number of frida attachments
+        """
+
+        i = 0
+        pid = self.adb.get_pid(pkg_name)
+        while not pid and i < 2:
+            sleep(20)
+            pid =  self.adb.get_pid(pkg_name)
+            i += 1
+        
+        if pid is not None:
+            
+            pid_frida = self._attach(apk_path, 0, pid)
+
+            # Loop to handle frida re-attachment in case droidbot stops the application
+            i = 0
+            while True:
+                try:
+                    if psutil.Process(pid_frida).is_running():
+                        continue
+                    else:
+                        i += 1
+                        sleep(30)
+                        pid = self.adb.get_pid(pkg_name)
+                        if pid is not None:
+                            pid_frida = self._attach(apk_path, i, pid)
+                        else:
+                            continue
+                    if i == max:
+                        break
+                except psutil.NoSuchProcess:
+                    if i < max:
+                        continue
+                    else:
+                        break
+
