@@ -7,7 +7,20 @@ class Adb:
     this class aggregates adb functionalities
     """
 
-    def __init__(self, device):
+    def __init__(self, device: str) -> None:
+        
+        """
+        
+        Parameters
+        ----------
+        device : str
+            device ID to connect with adb
+
+        Raises
+        ------
+        RuntimeError
+            raisen when adb is not found
+        """
         
         self.adb_path = "adb"
         
@@ -81,7 +94,7 @@ class Adb:
         # os.system(cmd)
         subprocess.call(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
     
-    def chmod(self, file_path: str, permissions: str):
+    def chmod(self, file_path: str, permissions: str) -> None:
         """
         chmod for a file in a device
 
@@ -106,7 +119,7 @@ class Adb:
         # os.system(cmd)
         subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
     
-    def execute_file(self, file_path: str):
+    def execute_file(self, file_path: str) -> None:
         """
         chmod for a file in a device
 
@@ -128,7 +141,7 @@ class Adb:
         subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
 
         
-    def uninstall_pkg(self, pkg_name: str):
+    def uninstall_pkg(self, pkg_name: str) -> None:
         """
         Uninstall app by pkg_name
 

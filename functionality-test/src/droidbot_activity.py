@@ -10,7 +10,7 @@ class DroidbotActivation:
     This class defines droidbot features
     """
 
-    def __init__(self, timeout: int, device: str, output_dir: str, droidbot_args: list, logger: Logger):
+    def __init__(self, timeout: int, device: str, output_dir: str, droidbot_args: list, logger: Logger) -> None:
         """
 
         Parameters
@@ -26,7 +26,7 @@ class DroidbotActivation:
         logger : Logger
             logger where to log monitoring process
         """
-        
+
         self.timeout = timeout
         self.device = device
         self.output_dir = output_dir
@@ -84,7 +84,7 @@ class DroidbotActivation:
         except Exception as e:
             self.logger.error(f"run droidbot interrupted due to {e}")
 
-    def kill(self, pkg_name: str):
+    def kill(self, pkg_name: str) -> None:
         """
 
         kill droidbot and instrumented application

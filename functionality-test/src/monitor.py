@@ -7,13 +7,17 @@ import shutil
 from jinja2 import Template
 from androguard.misc import AnalyzeAPK
 
+exclude_classes = ['android.support', 'android.content', 'android.widget', 'android.graphics', 'android.canvas',
+                   'android.view', 'android.util', 'android.animation', 'android.webkit','java.util', 'java.math', 
+                   'java.nio', 'java.io', 'java.lang']
+
 class FridaMonitor:
 
     """
     this class monitors the API calls
     """
 
-    def __init__(self, device: str, frida_server: str, logger: Logger, output_dir: str):
+    def __init__(self, device: str, frida_server: str, logger: Logger, output_dir: str) -> None:
         """
 
         Parameters
@@ -47,7 +51,7 @@ class FridaMonitor:
         self.adb = Adb(device)
 
     
-    def start_frida(self):
+    def start_frida(self) -> None:
         """
         start the frida server in the device
         """
@@ -82,6 +86,7 @@ class FridaMonitor:
         Tuple[List, str]
             List of the components to hook, package name of the apk
         """
+
         a, _, _ = AnalyzeAPK(apk_path)
         components = a.get_activities()
         components += a.get_receivers()
@@ -89,6 +94,50 @@ class FridaMonitor:
         components += a.get_services()
 
         return components, a.get_package()
+
+    @staticmethod
+    def _parse_apk(apk_path: str) -> Tuple[List, str]:
+        """
+        parse apk to get APIs to hook
+
+        Parameters
+        ----------
+        apk_path : str
+            path of the apk to hook
+
+        Returns
+        -------
+        Tuple[List, str]
+            List of the api classes to hook, package name of the apk
+        """
+
+        classes = set()
+        a, d, dx = AnalyzeAPK(apk_path)
+        # Iterate over the classes
+        for d1 in d: 
+            for cls in d1.get_classes():
+                class_name = cls.get_name()
+                
+                # Iterate over methods in the class
+                for method in cls.get_methods():
+                    method_name = method.get_name()
+
+                    # Get called methods in the current method
+                    g = dx.get_method_analysis(method)
+                    
+                    if g is not None:
+                        # Analyze each instruction and detect method calls
+                        for _, call, _ in g.get_xref_to():
+                            called_method = call.get_class_name()
+                            classes.add(str(called_method[:-1]))
+        classes = set([c[1:].replace('/', '.') for c in classes])
+        filtered_classes = set()
+        for c in classes:
+            if '.'.join(c.split('.', 2)[:2]) not in exclude_classes: 
+                if 'android' in c.split('.')[0] or 'java' in c.split('.')[0] :
+                    filtered_classes.add(c)
+
+        return filtered_classes, a.get_package()
 
     @staticmethod
     def _get_apk_sha(apk_path: str) -> str:
@@ -109,7 +158,7 @@ class FridaMonitor:
         apk_sha = os.path.split(apk_path)[-1].replace('.apk', '')
         return apk_sha
 
-    def _build_scrit(self, components: List, apk_sha: str):
+    def _build_script(self, components: List, apk_sha: str) -> None:
         """
         Build script of API Hooking
 
@@ -137,9 +186,9 @@ class FridaMonitor:
             file.write(filled_js)
 
     
-    def build_script(self, apk_path: str) -> str:
+    def build_script_from_components(self, apk_path: str) -> str:
         """
-        Build script of API Hooking
+        Build script of API Hooking from app components
 
         Parameters
         ----------
@@ -154,8 +203,29 @@ class FridaMonitor:
 
         components, pkg_name = self._parse_manifest(apk_path)
         apk_sha = self._get_apk_sha(apk_path)
-        self._build_scrit(components, apk_sha)
+        self._build_script(components, apk_sha)
         return pkg_name
+    
+    def build_script_from_apis(self, apk_path: str) -> str:
+        """
+        Build script of API Hooking from Android APIs
+
+        Parameters
+        ----------
+        apk_sha : str
+            sha256 of the apk to hook
+
+        Returns
+        ------- 
+        str  
+            package name of the apk to hook
+        """
+
+        apis, pkg_name = self._parse_apk(apk_path)
+        apk_sha = self._get_apk_sha(apk_path)
+        self._build_script(apis, apk_sha)
+        return pkg_name
+
 
     def attach(self, apk_path: str, pkg_name: str, idx: int) -> Tuple[int, str]:
         """
