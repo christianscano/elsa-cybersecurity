@@ -255,7 +255,7 @@ class FridaMonitor:
 
         output_path = os.path.join(output_path, f'monitoring{idx}.txt')
 
-        cmd = List[str] = [
+        cmd: List[str] = [
             self.frida_path,
             "-D",
             self.device,

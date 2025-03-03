@@ -50,7 +50,7 @@ class Adb:
              process id of the running application
         """
     
-        cmd = List[str] = [
+        cmd: List[str] = [
             self.adb_path,
             "-s",
             self.device,
@@ -82,7 +82,7 @@ class Adb:
             directory where to push the file
         """
 
-        cmd = List[str] = [
+        cmd: List[str] = [
             self.adb_path,
             "-s",
             self.device,
@@ -106,7 +106,7 @@ class Adb:
             permissions to give to the file
         """
 
-        cmd = List[str] = [
+        cmd: List[str] = [
             self.adb_path,
             "-s",
             self.device,
@@ -129,7 +129,7 @@ class Adb:
             file_path to push
         """
 
-        cmd = List[str] = [
+        cmd: List[str] = [
             self.adb_path,
             "-s",
             self.device,
@@ -150,7 +150,7 @@ class Adb:
         pkg_name : str
             package name to uninstall
         """
-        cmd = List[str] = [
+        cmd: List[str] = [
             self.adb_path,
             "-s",
             self.device,
