@@ -55,8 +55,8 @@ class Adb:
             "-s",
             self.device,
             "shell",
-            "ps | grep",
-            pkg_name
+            "\"ps | grep",
+            pkg_name+"\""
         ]
         cmd = " ".join(cmd)
         process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -133,12 +133,18 @@ class Adb:
             self.adb_path,
             "-s",
             self.device,
-            "su 0 sh -c",
+            "shell",
+            "su",
+            "0",
+            "sh",
+            "-c",
             f"'{file_path} &'"
         ]
         # cmd = " ".join(cmd)
+        print(cmd)
         # os.system(cmd)
-        subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+        # print(cmd)
+        subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
 
         
     def uninstall_pkg(self, pkg_name: str) -> None:

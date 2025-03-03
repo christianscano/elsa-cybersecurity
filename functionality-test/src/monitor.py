@@ -62,6 +62,7 @@ class FridaMonitor:
             if self.adb.get_pid(pkg_name='frida-server') is None:
                 # push frida-server in /data/local/tmp
                 self.adb.push_file(directory='/data/local/tmp', file_path=self.frida_server)
+                self.frida_server = self.frida_server.split('\\')[-1]
                 # make frida-server executable
                 self.adb.chmod(file_path=f'/data/local/tmp/{self.frida_server}', permissions='755')
                 # execute frida-server
@@ -182,7 +183,10 @@ class FridaMonitor:
         # inject the template of the base Api_hook script
         template = Template(js_template)
         filled_js = template.render(data)
-        self.script = os.join(self.output_dir, apk_sha, "frida", "API_hook.js")
+        output = os.path.join(self.output_dir, apk_sha)
+        os.mkdir(os.path.join(output))
+        os.mkdir(os.path.join(output, "frida"))
+        self.script = os.path.join(self.output_dir, apk_sha, "frida", "API_hook.js")
 
         with open(self.script, "w") as file:
             file.write(filled_js)
@@ -249,7 +253,7 @@ class FridaMonitor:
         """
 
         apk_sha = self._get_apk_sha(apk_path)
-        output_path = os.join(self.output_dir, apk_sha, "frida")
+        output_path = os.path.join(self.output_dir, apk_sha, "frida")
         if not os.path.exists(output_path):
             os.mkdir(output_path)
 
