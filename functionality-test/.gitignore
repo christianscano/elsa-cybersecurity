@@ -2,3 +2,6 @@
 frida-server/*
 # rom Android devices rooted
 rom/*
+
+# log files
+*.log
