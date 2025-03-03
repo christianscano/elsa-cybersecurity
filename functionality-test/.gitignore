@@ -5,3 +5,6 @@ rom/*
 
 # log files
 *.log
+
+# UI xml
+*.xml
