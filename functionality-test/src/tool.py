@@ -266,7 +266,7 @@ class Adb:
         self._get_ui_xml('/sdcard/ui_dump.xml', ".")
         # if the installation popup is present touch Install
         if self._check_install_popup('./ui_dump.xml'):
-            self.touch_screen("293", "2062")
+            self.touch_screen("293", "2062") # the coordinates are dependent on the smartphone you are using
 
         
     def uninstall_pkg(self, pkg_name: str) -> None:
