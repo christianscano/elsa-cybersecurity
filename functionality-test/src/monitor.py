@@ -1,7 +1,7 @@
 import subprocess
 from tool import Adb
 import os, threading
-from loguru import Logger
+from loguru import logger
 from typing import List, Tuple
 import shutil
 from jinja2 import Template
@@ -19,7 +19,7 @@ class FridaMonitor:
     this class monitors the API calls
     """
 
-    def __init__(self, device: str, frida_server: str, logger: Logger, output_dir: str) -> None:
+    def __init__(self, device: str, frida_server: str, log, output_dir: str) -> None:
         """
 
         Parameters
@@ -28,7 +28,7 @@ class FridaMonitor:
             device id where to run frida and the instrumented application
         frida_server : str
             path frida server to run in the device to hook APIs
-        logger : Logger
+        log : Logger
             logger where to log monitoring process
         output_dir : str
             path of the monitoring output
@@ -36,7 +36,7 @@ class FridaMonitor:
         
         self.device = device
         self.frida_server = frida_server
-        self.logger = logger
+        self.log = log
         self.output_dir = output_dir
         self.script = None
 
@@ -67,11 +67,11 @@ class FridaMonitor:
                 # execute frida-server
                 self.adb.execute_file(file_path=f'/data/local/tmp/{self.frida_server}')
                 if self.adb.get_pid(pkg_name='frida-server'):
-                    self.logger.info("frida-server is up and running")
+                    self.log.info("frida-server is up and running")
             else:
-                self.logger.info("frida-server is up and running")
+                self.log.info("frida-server is up and running")
         except Exception as e:
-            self.logger.error(f"start_frida interrupted due to {e}")
+            self.log.error(f"start_frida interrupted due to {e}")
 
     @staticmethod
     def _parse_manifest(apk_path: str) -> Tuple[List, str]:
@@ -268,7 +268,7 @@ class FridaMonitor:
         ]
 
         process = subprocess.Popen(cmd, stderr=subprocess.DEVNULL)
-        self.logger.info(f"frida is attached and hooking APIs for {apk_path}")
+        self.log.info(f"frida is attached and hooking APIs for {apk_path}")
         return process.pid
 
     def run_hooking(self, apk_path: str, pkg_name: str, max: int) -> None:
