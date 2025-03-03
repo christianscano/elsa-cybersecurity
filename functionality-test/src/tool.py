@@ -1,6 +1,7 @@
 from typing import List
 import subprocess, os
 import shutil
+import uiautomator2 as u2
 
 class Adb:
     """
@@ -216,7 +217,7 @@ class Adb:
         """
 
         with open(file_path, "r", encoding="utf-8") as file:
-            return "Installa tramite USB" in file.read()
+            return "Install via USB" in file.read()
     
     def touch_screen(self, x: str, y: str) -> None:
         """
@@ -242,6 +243,19 @@ class Adb:
         ]
 
         subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+    
+    def _check_install_popup_u2(self) -> bool:
+        """
+        check the installation popup via uiautomator2
+
+        Returns
+        -------
+        bool
+            True if the popus USB install is present, False otherwise 
+        """
+
+        d = u2.connect(self.device)
+        return d, d.xpath(f"//*[contains(@text, 'Install')]").exists
 
     
     def install_apk(self, path_app: str) -> None:
@@ -263,12 +277,15 @@ class Adb:
         ]
 
         subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-        self._get_ui_xml('/sdcard/ui_dump.xml', ".")
+        # self._get_ui_xml('/sdcard/ui_dump.xml', ".")
         # if the installation popup is present touch Install
-        if self._check_install_popup('./ui_dump.xml'):
-            self.touch_screen("293", "2062") # the coordinates are dependent on the smartphone you are using
+        # if self._check_install_popup('./ui_dump.xml'):
+        #    self.touch_screen("293", "2062") # the coordinates are dependent on the smartphone you are using
+        device, check = self._check_install_popup_u2()
+        if check:
+            device(text="Install").click()
+            
 
-        
     def uninstall_pkg(self, pkg_name: str) -> None:
         """
         Uninstall app by pkg_name
