@@ -1,10 +1,4 @@
-
-"""Black-Box Problem-Space attack."""
-
-import sys
-from pathlib import Path
-
-sys.path.append(str(Path(__file__).parent / "Obfuscapk/src"))
+"""Implementations of manipulations that can be applied to the APKs."""
 
 
 from .manipulation_space import Manipulations, ManipulationSpace

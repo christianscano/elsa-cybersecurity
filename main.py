@@ -55,11 +55,13 @@ if __name__ == "__main__":
         "returns a trained classifier.",
     )
 
-    args = parser.parse_args()
+    # args = parser.parse_args()
 
-    classifier = _load_classifier(args.clf_loader_path)
+    # classifier = _load_classifier(args.clf_loader_path)
+
+    classifier = _load_classifier("android-detectors/src/loaders/drebin_loader.py")
 
     results = evaluate(classifier, config)
 
     with Path("results/results.json").open("w") as f:
-        json.dump(results, f)
+        json.dump(results, f, indent=4)

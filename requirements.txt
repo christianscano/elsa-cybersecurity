@@ -1,7 +1,6 @@
 numpy==2.2.3
-scikit-learn==1.6.1
+scikit-learn==1.4.0
 PyYAML==6.0.2
-# androguard @ git+https://github.com/androguard/androguard@v3.4.0a1
 psutil==7.0.0
 scipy==1.15.2
 networkx==3.2.1

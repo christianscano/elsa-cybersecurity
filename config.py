@@ -18,7 +18,7 @@ APKs download (in this case it will be clipped to 20) and the attack.
 Note that during the attack a higher number of concurrent processes
 means higher memory consumption, which might cause failures.
 """
-N_JOBS = 1
+N_JOBS = 6
 
 
 """

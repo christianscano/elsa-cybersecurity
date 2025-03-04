@@ -1,13 +1,8 @@
 """
 The module provides the `ManipulationStatus` class, which is used to manage the
-status of an APK manipulation process. It includes methods for decompiling,
+APK during the manipulation process. It includes methods for decompiling,
 recompiling, and updating the APK, as well as tracking the changes made during
 the manipulation process.
-
-Classes
--------
-ManipulationStatus:
-    Manages the status and operations related to APK manipulation.
 """
 
 import os
@@ -18,30 +13,31 @@ from typing import Optional
 from memory_tempfile import MemoryTempfile
 from obfuscapk import util
 from obfuscapk.obfuscation import Obfuscation
-from obfuscapk.tool import Apktool
 from obfuscapk.toolbundledecompiler import BundleDecompiler
+
+from .tools.apktool import Apktool
 
 
 class ManipulationStatus(Obfuscation):
     """
-    The class contains the references to the APK, the methods for
+    Class contains the references to the APK, the methods for
     decompiling/recompiling it, and the status of the changes to be made.
     A single object is passed from the attack to the various obfuscators.
     """
 
     def __init__(
         self,
-        apk_path            : str,
-        obfuscated_apk_path : Optional[str] = None,
-        ignore_libs         : bool = False,
-        interactive         : bool = False,
-        virus_total_api_key : Optional[str] = None,
-        keystore_file       : Optional[str] = None,
-        keystore_password   : Optional[str] = None,
-        key_alias           : Optional[str] = None,
-        key_password        : Optional[str] = None,
+        apk_path: str,
+        obfuscated_apk_path: Optional[str] = None,
+        ignore_libs: bool = False,
+        interactive: bool = False,
+        virus_total_api_key: Optional[str] = None,
+        keystore_file: Optional[str] = None,
+        keystore_password: Optional[str] = None,
+        key_alias: Optional[str] = None,
+        key_password: Optional[str] = None,
         ignore_packages_file: Optional[str] = None,
-        use_aapt2           : bool = False,
+        use_aapt2: bool = False,
     ) -> None:
         """
         Create and initialize the ManipulationStatus object.
@@ -88,18 +84,18 @@ class ManipulationStatus(Obfuscation):
             use_aapt2,
         )
 
-        self._string_to_encrypt      = set()
-        self._api_to_reflect         = set()
+        self._string_to_encrypt = set()
+        self._api_to_reflect = set()
         self._android_api_to_reflect = set()
-        self._n_arithmetic_branch    = 0
-        self._class_to_rename        = set()
-        self._call_to_redirect       = set()
-        self._urls_to_inject         = set()
-        self._apis_to_inject         = set()
-        self._orig_decoded_apk_path  = None
-        self._dir_list               = set()
-        self._multidex_smali_files   = []
-        self._is_decoded             = False
+        self._n_arithmetic_branch = 0
+        self._class_to_rename = set()
+        self._call_to_redirect = set()
+        self._urls_to_inject = set()
+        self._apis_to_inject = set()
+        self._orig_decoded_apk_path = None
+        self._dir_list = set()
+        self._multidex_smali_files = []
+        self._is_decoded = False
 
     def update_path(self, idx: int) -> None:
         """
@@ -121,8 +117,8 @@ class ManipulationStatus(Obfuscation):
     def decode_apk(
         self,
         skip_resources: bool = False,
-        skip_code     : bool = False,
-        only_main_dex : bool = False,
+        skip_code: bool = False,
+        only_main_dex: bool = False,
     ) -> None:
         """
         Decode the APK file using apktool or BundleDecompiler.
@@ -138,28 +134,28 @@ class ManipulationStatus(Obfuscation):
         """
         if not self._is_decoded:
             # The input apk will be decoded with apktool or BundleDecompiler.
-            apktool          : Apktool         = Apktool()
-            bundledecompiler : BundleDecompiler = BundleDecompiler()
+            apktool: Apktool = Apktool()
+            bundledecompiler: BundleDecompiler = BundleDecompiler()
 
             # <working_directory>/<apk_path>/
-            self._decoded_apk_path = Path(self.working_dir_path) / Path(self.apk_path).stem
+            self._decoded_apk_path = str(
+                Path(self.working_dir_path) / Path(self.apk_path).stem
+            )
             self._dir_list.add(self._decoded_apk_path)
 
             try:
                 if self.is_bundle:
                     bundledecompiler.decode(
-                        self.apk_path,
-                        self._decoded_apk_path,
-                        force = False
+                        self.apk_path, self._decoded_apk_path, force=False
                     )
                 else:
                     apktool.decode(
                         self.apk_path,
                         self._decoded_apk_path,
-                        force          = True,
-                        skip_resources = skip_resources,
-                        skip_code      = skip_code,
-                        only_main_dex  = only_main_dex,
+                        force=True,
+                        skip_resources=skip_resources,
+                        skip_code=skip_code,
+                        only_main_dex=only_main_dex,
                     )
 
                 # Update manifest file path.
@@ -170,8 +166,8 @@ class ManipulationStatus(Obfuscation):
                 self._check_multidex()
                 self._update_native_lib_files()
 
-            except Exception as e:
-                self.logger.exception("Error during apk decoding: %s", e)  # noqa: TRY401
+            except Exception as _:
+                self.logger.exception("Error during apk decoding")
                 raise
             else:
                 self._is_decoded = True
@@ -192,14 +188,14 @@ class ManipulationStatus(Obfuscation):
 
     def reset(self) -> None:
         """Reset the ManipulationStatus object."""
-        self.class_to_rename                      = set()
-        self.android_api_to_reflect               = set()
-        self.string_to_encrypt                    = set()
-        self.urls_to_inject                       = set()
-        self.apis_to_inject                       = set()
-        self.obfuscators_adding_fields            = 0
-        self.obfuscators_adding_methods           = 0
-        self.decrypt_asset_smali_file_added_flag  = False
+        self.class_to_rename = set()
+        self.android_api_to_reflect = set()
+        self.string_to_encrypt = set()
+        self.urls_to_inject = set()
+        self.apis_to_inject = set()
+        self.obfuscators_adding_fields = 0
+        self.obfuscators_adding_methods = 0
+        self.decrypt_asset_smali_file_added_flag = False
         self.decrypt_string_smali_file_added_flag = False
 
     # ------------------
@@ -217,7 +213,8 @@ class ManipulationStatus(Obfuscation):
             self._orig_decoded_apk_path,
             new_decoded_apk_path,
             ignore=lambda directory, _contents: ["assets"]
-                if directory == self._orig_decoded_apk_path else []
+            if directory == self._orig_decoded_apk_path
+            else [],
         )
         if (Path(self._orig_decoded_apk_path) / "assets").is_dir():
             os.symlink(
@@ -230,9 +227,12 @@ class ManipulationStatus(Obfuscation):
         self._dir_list.add(self._decoded_apk_path)
         self._manifest_file = self._get_manifest_file(self._decoded_apk_path)
 
-    def _get_manifest_file(self, decoded_apk_path: Path) -> Path:
-        return (decoded_apk_path / "base" / "manifest" / "AndroidManifest.xml"
-            if self.is_bundle else decoded_apk_path / "AndroidManifest.xml")
+    def _get_manifest_file(self, decoded_apk_path: str) -> Path:
+        return (
+            Path(decoded_apk_path) / "base" / "manifest" / "AndroidManifest.xml"
+            if self.is_bundle
+            else Path(decoded_apk_path) / "AndroidManifest.xml"
+        )
 
     def _get_smali_files(self) -> list:
         """Retrieve and filter the list of smali files."""
@@ -251,8 +251,9 @@ class ManipulationStatus(Obfuscation):
             filtered_smali_files = []
             for smali_file in smali_files:
                 relative_smali_file = Path(
-                    *os.path.relpath(smali_file, self._decoded_apk_path)\
-                        .split(os.path.sep)[1:]
+                    *os.path.relpath(smali_file, self._decoded_apk_path).split(
+                        os.path.sep
+                    )[1:]
                 )
                 if not any(
                     str(relative_smali_file).startswith(str(lib))
@@ -262,13 +263,14 @@ class ManipulationStatus(Obfuscation):
             smali_files = filtered_smali_files
 
         smali_files.sort()
+
         return smali_files
 
     def _check_multidex(self) -> None:
         """Check if the APK is multidex and organize smali files accordingly."""
-        self._is_multidex          = False
+        self._is_multidex = False
         self._multidex_smali_files = []
-        base_path                  = Path(self._decoded_apk_path)
+        base_path = Path(self._decoded_apk_path)
 
         if self.is_bundle:
             if (base_path / "base" / "dex" / "smali_classes2").is_dir():
@@ -281,12 +283,14 @@ class ManipulationStatus(Obfuscation):
             for smali_directory in smali_directories:
                 current_directory = (
                     base_path / "base" / "dex" / smali_directory
-                        if self.is_bundle else base_path / smali_directory
+                    if self.is_bundle
+                    else base_path / smali_directory
                 )
 
                 if current_directory.is_dir():
                     multidex_files = [
-                        smali_file for smali_file in self._smali_files
+                        smali_file
+                        for smali_file in self._smali_files
                         if str(smali_file).startswith(str(current_directory))
                     ]
                     self._multidex_smali_files.append(multidex_files)
@@ -295,7 +299,9 @@ class ManipulationStatus(Obfuscation):
         """Update the list of native library files (.so) included in the application."""
         self._native_lib_files = [
             Path(root) / file_name
-            for root, _dir_names, file_names in os.walk(Path(self._decoded_apk_path) / "lib")
+            for root, _dir_names, file_names in os.walk(
+                Path(self._decoded_apk_path) / "lib"
+            )
             for file_name in file_names
             if file_name.endswith(".so")
         ]

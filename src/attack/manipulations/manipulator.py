@@ -1,15 +1,19 @@
+""" """
+
 import logging
 import os
+import pickle
 import uuid
 from pathlib import Path
+from typing import Optional
 
+from models.base import BaseModel
 from obfuscapk.tool import ApkSigner, Apktool, Zipalign
 from secml.parallel import parfor2
 
-from .manipulation_space import Manipulations
+from .manipulation_space import Manipulations, ManipulationSpace
 from .manipulation_status import ManipulationStatus
-from .manipulator import Manipulator
-from .obfuscators import (
+from .tools.obfuscators import (
     ApiInjection,
     AttAdvancedReflection,
     AttClassRename,
@@ -20,39 +24,13 @@ from .obfuscators import (
 # For the plugin system log only the error messages and ignore the log level
 # set by the user.
 logging.getLogger("yapsy").level = logging.ERROR
+logging.getLogger("obfuscapk.tool.Apktool").setLevel(logging.CRITICAL)
+logging.getLogger("obfuscapk.obfuscation").setLevel(logging.CRITICAL)
 
-path                                 = Path(__file__).parent / "lib"
-os.environ["APKTOOL_PATH"]           = str(path / "apktool")
-os.environ["APKSIGNER_PATH"]         = str(path / "apksigner")
+path = Path(__file__).parent / "tools/lib"
+os.environ["APKTOOL_PATH"] = str(path / "apktool")
+os.environ["APKSIGNER_PATH"] = str(path / "apksigner")
 os.environ["BUNDLE_DECOMPILER_PATH"] = str(path / "BundleDecompiler.jar")
-
-
-def _apply_manipulations(
-    idx               : int,
-    manipulator       : Manipulator,
-    manipulations_list: list[Manipulations]
-) -> Manipulations:
-    """"""
-    manipulator.manipulation_status.obfuscated_apk_path = (
-        manipulator.manipulated_apks_dir(
-            f"{Path(manipulator._apk_path).stem}_"
-            f"{uuid.uuid1().hex}.apk"
-        )
-    )
-
-    manipulations = manipulations_list[idx]
-
-    try:
-        manipulator._manipulate(manipulations, idx)
-        manipulator.manipulation_status.build_obfuscated_apk()
-    except:
-        manipulations = None
-    finally:
-        manipulator.manipulation_status.clean_iter(idx)
-        if Path(manipulator.manipulation_status.obfuscated_apk_path).exists():
-            Path(manipulator.manipulation_status.obfuscated_apk_path).unlink()
-
-    return manipulations
 
 
 class Manipulator:
@@ -60,9 +38,9 @@ class Manipulator:
 
     def __init__(
         self,
-        apk_path            : str,
+        apk_path: str,
         manipulated_apks_dir: str,
-        logging_level       : int = logging.INFO
+        logging_level: int = logging.INFO,
     ) -> None:
         """
         Create and inizialize the Manipulator object.
@@ -79,12 +57,8 @@ class Manipulator:
         self._manipulated_apks_dir = manipulated_apks_dir
 
         # Logging configuration.
-        self.logger = logging.getLogger(__name__)
-        logging.basicConfig(
-            format="%(asctime)s> [%(levelname)s][%(name)s][%(funcName)s()] %(message)s",
-            datefmt="%d/%m/%Y %H:%M:%S",
-            level=logging_level,
-        )
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger.setLevel(logging_level)
 
         self._check_external_tool_dependencies()
         self._apk_path = apk_path
@@ -99,34 +73,30 @@ class Manipulator:
         ]
 
         self.manipulation_status = ManipulationStatus(
-            apk_path,
-            obfuscated_apk_path        = None,
-            is_decoded                 = False,
-            is_signed                  = False,
-            aligned_apk_path           = None,
-            signed_apk_path            = None,
-            aligned_signed_apk_path    = None,
-            obfuscators_adding_fields  = None,
-            obfuscators_adding_methods = None,
-            urls_to_inject             = None,
-            apis_to_inject             = None,
-            string_to_encrypt          = None,
-            android_api_to_reflect     = None,
-            class_to_rename            = None,
-            only_main_dex              = False
+            apk_path=apk_path,
+            obfuscated_apk_path=None,
+            ignore_libs=False,
+            interactive=False,
+            virus_total_api_key=None,
+            keystore_file=None,
+            keystore_password=None,
+            key_alias=None,
+            key_password=None,
+            ignore_packages_file=None,
+            use_aapt2=False,
         )
 
         self._decode_apk()
 
-    def manipulate(self, manipulations: Manipulations, i: int) -> str:
+    def manipulate(self, manipulations: Manipulations, idx: int) -> str:
         """
-        Perform the APK manipulation.
+        Perform the provided manipulations to the APK under analysis.
 
         Parameters
         ----------
         manipulations : Manipulations
-            Manipulations to apply
-        i : int
+            Possible manipulations to apply
+        idx : int
             Index of the manipulation
 
         Returns
@@ -134,15 +104,14 @@ class Manipulator:
         str
             Path to the manipulated APK
         """
-        obfuscated_apk_path = self.manipulated_apks_dir(
-            f"{Path(self._apk_path).stem}_"
-            f"{uuid.uuid1().hex}.apk"
+        obfuscated_apk_path = self.get_manipulated_apks_dir(
+            f"{Path(self._apk_path).stem}_{uuid.uuid1().hex}.apk"
         )
 
         self.manipulation_status.obfuscated_apk_path = obfuscated_apk_path
 
         try:
-            self._manipulate(manipulations, i)
+            self._manipulate(manipulations, idx)
             self.manipulation_status.build_obfuscated_apk()
             self.manipulation_status.sign_obfuscated_apk()
             self.manipulation_status.align_obfuscated_apk()
@@ -150,32 +119,17 @@ class Manipulator:
             self.logger.exception("Error during APK manipulation")
             obfuscated_apk_path = None
         finally:
-            self.manipulation_status.clean_iter(i)
+            self.manipulation_status.clean_iter(idx)
 
         return obfuscated_apk_path
 
-    def manipulated_apks_dir(self, file: str) -> str:
-        """
-        Build the path to the manipulated APK.
-
-        Parameters
-        ----------
-        file : str
-            File name of the manipulated APK
-
-        Returns
-        -------
-        str
-            Path to the manipulated APK
-        """
-        return Path(self._manipulated_apks_dir) / file
-
-    def get_error_free_manipulations(
+    def get_error_free_manipulations(  # noqa: C901
         self,
         manipulations: Manipulations,
-        n_jobs: int = 1
+        n_jobs: int = 1,
+        cache_dir: Optional[str] = None,
     ) -> Manipulations:
-        """"
+        """
         Retrieve all possible manipulations that do not raise any error
         in a specific APK.
 
@@ -193,39 +147,47 @@ class Manipulator:
         """
         self.logger.debug("Checking error-free manipulations")
 
-        # Test a build without applying manipulations, if the
-        # APK cannot be built, it retries without decompiling
-        # resources and considering only main dex files.
+        error_free_manipulations = self._load_error_free_manipulations(
+            manipulations, cache_dir
+        )
+
+        if error_free_manipulations is not None:
+            return error_free_manipulations
+
+        # [Step 1] Test a build without applying manipulations, if the APK cannot be built,
+        # it retries without decompiling resources and considering only main dex files.
         try:
             self.manipulation_status.build_obfuscated_apk()
-        except Exception as _:
-            self._clean_data()
+        except Exception as _:  # noqa: BLE001
+            self.clean_data()
 
             if Path(self.manipulation_status.obfuscated_apk_path).exists():
                 Path(self.manipulation_status.obfuscated_apk_path).unlink()
             try:
                 self.logger.debug(
-                    "Error during APK building: trying"
-                    "without decompiling resources"
-                    "and considering only main dex files"
+                    "Error during APK building: trying without decompiling "
+                    "resources and considering only main dex files"
                 )
                 self.manipulation_status._is_decoded = False
                 self.manipulation_status.decode_apk(
-                    skip_resources = True,
-                    only_main_dex  = self._only_main_dex
+                    skip_resources=True, only_main_dex=self._only_main_dex
                 )
                 self.manipulation_status.build_obfuscated_apk()
+
+                # Remove the AttClassRename obfuscator if the APK is built
+                # without decompiling resources and considering only main dex
                 self.obfuscators = [
                     o for o in self.obfuscators if not isinstance(o, AttClassRename)
                 ]
-            except Exception as e:
-                self._clean_data()
-                self.logger.critical("The APK cannot be build: %s", e)
+            except Exception as _:
+                self.clean_data()
+                self.logger.exception("The APK cannot be build")
                 raise
         finally:
             if Path(self.manipulation_status.obfuscated_apk_path).exists:
                 Path(self.manipulation_status.obfuscated_apk_path).unlink()
 
+        # [Step 2] Retrieve error free manipulations
         error_free_manipulations = Manipulations([], [])
 
         def _recurse_apply_manipulations(manipulations: Manipulations) -> None:
@@ -242,18 +204,18 @@ class Manipulator:
                 manipulations_list,
             )
 
-            for applied_manipulations, manipulations in zip(
-                applied_manipulations_list, manipulations_list
+            for applied_manipulations, manipulation in zip(
+                applied_manipulations_list, manipulations_list, strict=True
             ):
                 if applied_manipulations is None:
-                    if len(manipulations) > 1:
-                        n = min(n_jobs, len(manipulations))
-                        idxs = manipulations.get_idxs()
-                        manipulations = [
-                            manipulations.get_manipulations_from_vector(idxs[i::n])
+                    if len(manipulation) > 1:
+                        n = min(n_jobs, len(manipulation))
+                        idxs = manipulation.get_idxs()
+                        sub_manipulations = [
+                            manipulation.get_manipulations_from_vector(idxs[i::n])
                             for i in range(n)
                         ]
-                        _recurse_apply_manipulations(manipulations)
+                        _recurse_apply_manipulations(sub_manipulations)
                 else:
                     error_free_manipulations.inject.extend(applied_manipulations.inject)
                     error_free_manipulations.obfuscate.extend(
@@ -262,7 +224,88 @@ class Manipulator:
 
         _recurse_apply_manipulations(manipulations)
 
+        self._save_error_free_manipulations(error_free_manipulations, cache_dir)
+
         return error_free_manipulations
+
+    def model_probing(
+        self,
+        classifier: BaseModel,
+        manipulation_space: ManipulationSpace,
+        init_score: float,
+    ) -> None:
+        """
+        Probe the classifier to understand which features are significant for
+        the classification process.
+
+        Parameters
+        ----------
+        classifier : Classifier
+            Classifier to probe
+        manipulation_space : ManipulationSpace
+            Manipulation space
+        """
+
+        def _model_probing(
+            idx: int,
+            manipulator: Manipulator,
+            manipulations: Manipulations,
+            classifier: BaseModel,
+            init_score: float,
+        ) -> tuple[float, bool]:
+            apk_path = manipulator.manipulate(manipulations, idx)
+            _, scores = classifier.classify([apk_path])
+            return scores.item(), init_score != scores.item()
+
+        self.logger.info("Probing the classifier")
+
+        injections_by_category = manipulation_space.get_injections_by_categories()
+        obfuscations_by_category = manipulation_space.get_obfuscations_by_categories()
+
+        for feat_category, feats in {
+            **injections_by_category,
+            **obfuscations_by_category,
+        }.items():
+            if feat_category in injections_by_category:
+                manipulations = Manipulations(feats, [])
+            else:
+                manipulations = Manipulations([], feats)
+
+            result = _model_probing(
+                0,
+                self,
+                manipulations,
+                classifier,
+                init_score,
+            )
+
+            self.logger.debug("Probing results for %s: %.2f", feat_category, result[0])
+
+            if not result[1]:
+                manipulation_space.disable_category(feat_category)
+
+            if Path(self.manipulation_status.obfuscated_apk_path).exists():
+                Path(self.manipulation_status.obfuscated_apk_path).unlink()
+
+    def get_manipulated_apks_dir(self, file: str) -> str:
+        """
+        Build the path containing the manipulated APK.
+
+        Parameters
+        ----------
+        file : str
+            File name of the manipulated APK
+
+        Returns
+        -------
+        str
+            Path to the manipulated APK
+        """
+        return str(Path(self._manipulated_apks_dir) / file)
+
+    def clean_data(self) -> None:
+        """Clean the data of the ManipulationStatus object."""
+        self.manipulation_status.clean_data()
 
     # ----------------
     # Private methods
@@ -279,15 +322,14 @@ class Manipulator:
         ApkSigner()
         Zipalign()
 
-
     def _decode_apk(self) -> None:
         """Try to decode the APK."""
         self.logger.debug("Decoding APK")
 
         try:
             self.manipulation_status.decode_apk()
-        except Exception as e:
-            self._clean_data()
+        except Exception as _:  # noqa: BLE001
+            self.clean_data()
 
             if Path(self.manipulation_status.obfuscated_apk_path).exists():
                 Path(self.manipulation_status.obfuscated_apk_path).unlink()
@@ -297,34 +339,35 @@ class Manipulator:
                     "Error while decoding APK: trying again"
                     "considering only main dex files"
                 )
-                self.manipulation_status.decode_apk(only_main_dex = True)
+                self.manipulation_status.decode_apk(only_main_dex=True)
                 self._only_main_dex = True
-            except Exception as e:
-                self._clean_data()
+            except Exception as _:
+                self.clean_data()
                 if Path(self.manipulation_status.obfuscated_apk_path).exists():
                     Path(self.manipulation_status.obfuscated_apk_path).unlink()
 
-                self.logger.critical(
-                    "Error during APK decoding: %s", e, exc_info = True
-                )
-
+                self.logger.exception("Error during APK decoding")
                 raise
 
-    def _manipulate(self, manipulations: Manipulations, idx: int) -> None:
+    def _manipulate(self, manipulations: Manipulations, idx: int) -> None:  # noqa: C901
         self.manipulation_status.reset()
         self.manipulation_status.update_path(idx)
 
+        # Extract the features to inject from the manipulations
         for feature in manipulations.inject:
             splitted_feat = feature.split("::")
             feat_type, feat = splitted_feat[0], splitted_feat[1]
+
             if feat_type == "urls":
                 self.manipulation_status.urls_to_inject.add(feat)
             elif feat_type == "api_calls":
                 self.manipulation_status.apis_to_inject.add(feat)
 
+        #  Extract the features to obfuscate from the manipulations
         for feature in manipulations.obfuscate:
             splitted_feat = feature.split("::")
             feat_type, feat = splitted_feat[0], splitted_feat[1]
+
             if feat_type == "urls":
                 self.manipulation_status.string_to_encrypt.add(feat)
             elif feat_type in {"api_calls", "suspicious_calls"}:
@@ -343,6 +386,90 @@ class Manipulator:
         for obfuscator in self.obfuscators:
             obfuscator.obfuscate(self.manipulation_status)
 
-    def _clean_data(self) -> None:
-        """Clean the state of the ManipulationStatus object."""
-        self.manipulation_status.clean_data()
+    def _load_error_free_manipulations(
+        self, manipulations: Manipulations, cache_dir: str
+    ) -> Manipulations | None:
+        """Try to load the saved error free manipulations for an APK."""
+        if cache_dir:
+            dir_path = Path(cache_dir) / f"{Path(self._apk_path).stem}"
+
+            if len(manipulations.inject) > 0 and len(manipulations.obfuscate) == 0:
+                filename = f"{Path(self._apk_path).stem}.inject.pkl"
+            elif len(manipulations.inject) == 0 and len(manipulations.obfuscate) > 0:
+                filename = f"{Path(self._apk_path).stem}.obfuscate.pkl"
+            else:
+                filename = f"{Path(self._apk_path).stem}.all.pkl"
+
+            if (dir_path / filename).exists():
+                return pickle.load((Path(dir_path) / filename).open("rb"))  # noqa: S301
+
+        return None
+
+    def _save_error_free_manipulations(
+        self, error_free_manipulations: Manipulations, cache_dir: str
+    ) -> None:
+        """Save the error free manipulations for an APK."""
+        if cache_dir:
+            dir_path = Path(cache_dir) / f"{Path(self._apk_path).stem}"
+            dir_path.mkdir(parents=True, exist_ok=True)
+
+            if (
+                len(error_free_manipulations.inject) > 0
+                and len(error_free_manipulations.obfuscate) == 0
+            ):
+                filename = f"{Path(self._apk_path).stem}.inject.pkl"
+            elif (
+                len(error_free_manipulations.inject) == 0
+                and len(error_free_manipulations.obfuscate) > 0
+            ):
+                filename = f"{Path(self._apk_path).stem}.obfuscate.pkl"
+            else:
+                filename = f"{Path(self._apk_path).stem}.all.pkl"
+
+            pickle.dump(error_free_manipulations, (dir_path / filename).open("wb"))
+
+
+# ------------------
+# Utility functions
+# ------------------
+
+
+def _apply_manipulations(
+    idx: int, manipulator: Manipulator, manipulations_list: list[Manipulations]
+) -> Manipulations:
+    """
+    Apply the manipulations to the APK (only for get_error_free_manipulations).
+
+    Parameters
+    ----------
+    idx : int
+        Index of the manipulation
+    manipulator : Manipulator
+        Manipulator object
+    manipulations_list : list[Manipulations]
+        List of manipulations to apply
+
+    Returns
+    -------
+    Manipulations
+        Manipulations applied
+    """
+    manipulator.manipulation_status.obfuscated_apk_path = (
+        manipulator.get_manipulated_apks_dir(
+            f"{Path(manipulator._apk_path).stem}_{uuid.uuid1().hex}.apk"
+        )
+    )
+
+    manipulations = manipulations_list[idx]
+
+    try:
+        manipulator._manipulate(manipulations, idx)
+        manipulator.manipulation_status.build_obfuscated_apk()
+    except Exception as _:  # noqa: BLE001
+        manipulations = None
+    finally:
+        manipulator.manipulation_status.clean_iter(idx)
+        if Path(manipulator.manipulation_status.obfuscated_apk_path).exists():
+            Path(manipulator.manipulation_status.obfuscated_apk_path).unlink()
+
+    return manipulations

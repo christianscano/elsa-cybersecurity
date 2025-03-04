@@ -2,12 +2,6 @@
 The module contains the FeatureExtractor class, which is used to extract features
 from APK files. The extracted features are saved in JSON format and can be reused
 if they already exist.
-
-Classes:
---------
-FeatureExtractor:
-    Inherits from BaseFeatureExtractor and provides methods to
-    extract features from APK files and set up logging.
 """
 
 import json
