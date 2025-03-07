@@ -8,8 +8,8 @@ from pathlib import Path
 
 from obfuscapk import util
 from obfuscapk.obfuscators.advanced_reflection import AdvancedReflection
-from src.attack.manipulations.manipulator import ManipulationStatus
 
+from ...manipulation_status import ManipulationStatus
 from .util import read_smali_file, write_smali_file
 
 

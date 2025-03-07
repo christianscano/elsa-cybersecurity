@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 import config
-from src.evaluation import evaluate
+from black_box_attack import evaluate
 
 
 def _load_classifier(clf_loader_path: str) -> object:

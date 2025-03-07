@@ -11,8 +11,8 @@ from zipfile import ZIP_DEFLATED, ZipFile
 import pandas as pd
 from models.base import BaseModel
 
-from .apk_downloader import APKDownloader
-from .attack import BBPSAttack
+from .evasion import BBPSAttack
+from .utils.apk_downloader import APKDownloader
 
 
 def _download_apks(
@@ -117,7 +117,7 @@ def evaluate(classifier: BaseModel, config) -> list[dict]:
     adv_results = attack.run(
         ts_adv[:1],
         ts_fp_check[:1],
-        n_iterations=5,
+        query_budget=5,
         n_features=100,
         n_jobs=config.N_JOBS,
         n_candidates=20,

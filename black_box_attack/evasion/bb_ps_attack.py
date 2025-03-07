@@ -1,3 +1,5 @@
+"""TODO: Add a description here."""
+
 import contextlib
 import logging
 import os
@@ -9,8 +11,9 @@ from pathlib import Path
 import numpy as np
 from models.base import BaseModel
 
-from .feature_extraction import FeatureExtractor
-from .manipulations import Manipulations, ManipulationSpace, Manipulator
+from black_box_attack.feature_extraction import FeatureExtractor
+from black_box_attack.manipulations import Manipulations, ManipulationSpace, Manipulator
+import nevergrad as ng
 
 
 class BBPSAttack:
@@ -57,7 +60,7 @@ class BBPSAttack:
         self._feature_extractor = FeatureExtractor(logging_level=logging.ERROR)
         self._features_cache = features_dir
         self._goodware_features = None
-        self._n_iterations = None
+        self._query_budget = None
         self._n_features = None
         self._n_candidates = None
         self._stagnation = None
@@ -68,7 +71,7 @@ class BBPSAttack:
         self,
         malware_samples: list[str],
         goodware_samples: list[str],
-        n_iterations: int = 100,
+        query_budget: int = 100,
         n_features: int = 5,
         n_candidates: int = 5,
         stagnation: int = 5,
@@ -107,7 +110,7 @@ class BBPSAttack:
             will contain the predicted label and score and the path of the
             original sample.
         """
-        self._n_iterations = n_iterations
+        self._query_budget = query_budget
         self._n_features = n_features
         self._n_candidates = n_candidates
         self._stagnation = stagnation
@@ -184,6 +187,30 @@ class BBPSAttack:
         )
 
         manipulation_space = self._init_attack(malware_sample, manipulator, score)
+        optimizer = self._init_optimizer()
+        
+        """
+        x_adv, delta = self._init_attack_manipulation(samples)
+        self.optimizer = self._init_optimizer(model, delta)
+        budget = 0
+        self._init_best_tracking(delta)
+        while budget < self.query_budget:
+            x_adv, _ = self._apply_manipulation(samples, delta)
+            scores = model.decision_function(x_adv)
+            loss = self.loss_function(scores, target) * multiplier
+            delta = self._optimizer_step(delta, loss)
+            budget += self._consumed_budget()
+            self._track(budget, loss, scores, x_adv, delta)
+            self._track_best(loss, delta)
+        best_delta = self._get_best_delta()
+        best_x, _ = self._apply_manipulation(samples, best_delta)
+        return best_x, self._best_delta
+        """
+
+        budget = 0
+        while budget < self._query_budget:
+            pass
+
 
         # [Step 3] Cleanup
         if manipulator:
@@ -198,7 +225,7 @@ class BBPSAttack:
 
     def _init_attack(
         self, malware_sample: str, manipulator: Manipulator, init_score: float
-    ) -> tuple:
+    ) -> ManipulationSpace:
         """
         Prepare the manipulation space and probe the classifier under analysis to remove
         the features that are not relevant for the attack.
@@ -212,8 +239,8 @@ class BBPSAttack:
 
         Returns
         -------
-        tuple
-            The population, the toolbox and the manipulation space.
+        ManipulationSpace
+            Object containing the features that can be manipulated.
         """
         malware_features = self._feature_extractor.extract_features(
             [malware_sample], out_dir=self._features_cache

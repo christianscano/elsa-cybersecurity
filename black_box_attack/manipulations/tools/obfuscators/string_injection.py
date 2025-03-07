@@ -6,8 +6,8 @@ for the Obfuscapk tool.
 import logging
 
 from obfuscapk import obfuscator_category, util
-from src.attack.manipulations.manipulation_status import ManipulationStatus
 
+from ...manipulation_status import ManipulationStatus
 from .util import generate_random_name
 
 

@@ -1,4 +1,4 @@
-"""Android black-Box problem-space attack."""
+"""Android black-box problem-space attack."""
 
 from .bb_ps_attack import BBPSAttack
 

@@ -1,11 +1,6 @@
 """
 The module provides functionality to download APK files from AndroZoo using their SHA256
 hash.
-
-Classes
--------
-APKDownloader:
-    A class to handle the downloading of APK files from AndroZoo.
 """
 
 import hashlib

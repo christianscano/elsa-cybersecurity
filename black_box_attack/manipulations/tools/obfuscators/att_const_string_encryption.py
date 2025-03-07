@@ -8,8 +8,8 @@ from pathlib import Path
 
 from obfuscapk import util
 from obfuscapk.obfuscators.const_string_encryption import ConstStringEncryption
-from src.attack.manipulations.manipulation_status import ManipulationStatus
 
+from ...manipulation_status import ManipulationStatus
 from .util import read_smali_file, write_smali_file
 
 

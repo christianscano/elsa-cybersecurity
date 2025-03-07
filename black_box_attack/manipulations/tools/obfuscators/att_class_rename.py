@@ -10,7 +10,8 @@ from pathlib import Path
 from defusedxml.ElementTree import XMLParser, parse
 from obfuscapk import util
 from obfuscapk.obfuscators.class_rename import ClassRename
-from src.attack.manipulations.manipulation_status import ManipulationStatus
+
+from ...manipulation_status import ManipulationStatus
 
 
 class PackageExtractionError(Exception):
